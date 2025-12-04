@@ -8,5 +8,5 @@ An IoT smart-switch project that allow remote activation of 2 relay channels thr
 
 The following programs are available:
 - [WiFi relay - AP](./wifi_relay_ap)
-- [WiFi relay - Telegram](./wifi_relay_telegram_mqtt)
+- [WiFi relay - Telegram](./wifi_relay_telegram)
 - [WiFi relay - Telegram, MQTT and server](./wifi_relay_telegram_mqtt)

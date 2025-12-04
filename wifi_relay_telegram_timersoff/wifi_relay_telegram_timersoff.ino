@@ -12,18 +12,14 @@ volatile bool flag_i = false;
 volatile bool flag_ip = false;
 bool relay1 = true;
 bool relay2 = true;
-bool timer1_on_active  = false;
-bool timer2_on_active  = false;
 bool timer1_off_active = false;
 bool timer2_off_active = false;
-uint32_t timer1_on = 0;
-uint32_t timer2_on = 0;
+bool timer_update = false;
 uint32_t timer1_off = 0;
 uint32_t timer2_off = 0;
-uint32_t timer1_on_end = 0;
-uint32_t timer2_on_end = 0;
 uint32_t timer1_off_end = 0;
 uint32_t timer2_off_end = 0;
+uint32_t next_timer_update = 0;
 volatile uint16_t count = 0;
 uint8_t t_s = 100;
 String chat_id  = "";
@@ -46,20 +42,25 @@ void send_ReplyKeyboard() {
 
 void send_Timer1OffKeyboard() {
   String kb = "[[\"+1 MIN (T1 OFF)\",\"+10 MIN (T1 OFF)\"],[\"+1 HOUR (T1 OFF)\",\"TURN OFF (T1 OFF)\"],[\"BACK\"]]";
-  bot.sendMessageWithReplyKeyboard(chat_id, "Timer 1:", "", kb, true, false, false);
+  bot.sendMessageWithReplyKeyboard(chat_id, "Timer 1 panel.", "", kb, true, false, false);
 }
 
 void send_Timer2OffKeyboard() {
   String kb = "[[\"+1 MIN (T2 OFF)\",\"+10 MIN (T2 OFF)\"],[\"+1 HOUR (T2 OFF)\",\"TURN OFF (T2 OFF)\"],[\"BACK\"]]";
-  bot.sendMessageWithReplyKeyboard(chat_id, "Timer 2:", "", kb, true, false, false);
+  bot.sendMessageWithReplyKeyboard(chat_id, "Timer 2 panel.", "", kb, true, false, false);
 }
 
-void addTimer(bool &active, uint32_t &timer_var, uint32_t &timer_end, uint32_t amount, void (*action)(), const char* msg) {
-  action();
-  timer_var += amount;
+void addTimer(bool &active, uint32_t &timer_var, uint32_t &timer_end, uint32_t amount, void (*action)()) {
+  if(!active) timer_var = amount;
+  else       timer_var += amount;
+
   timer_end = millis() +timer_var;
   active = true;
-  bot.sendMessage(chat_id, msg, "");
+  action();
+
+  timer_update = true;
+  next_timer_update = millis() +5000;
+  //bot.sendMessage(chat_id, "Timer OFF remaining " +formatTime(timer_end), "");
 }
 
 void stopTimer(bool &active, uint32_t &timer_ms, const char* msg) {
@@ -69,10 +70,16 @@ void stopTimer(bool &active, uint32_t &timer_ms, const char* msg) {
 }
 
 void checkTimer(bool &active, uint32_t &timer_ms, uint32_t &end, void (*action)(), const char* msg) {
-  if (active && millis() >= end) {
-    action();
+  if (!active){
+    timer_ms = 0;
+    end      = 0;
+    return;
+  }
+  
+  if (millis() >= end) {
     active = false;
     timer_ms = 0;
+    action();
     bot.sendMessage(chat_id, msg, "");
   }
 }
@@ -81,8 +88,8 @@ String formatTime(uint32_t timer_end) {
   if (timer_end == 0 || millis() >= timer_end) return "00:00";
   uint32_t remaining_ms = timer_end -millis();
   uint32_t minutes      = remaining_ms/60000;
-  uint32_t seconds      = (remaining_ms % 60000) / 1000;
-  return String(minutes) +":" +(seconds < 10 ? "0" : "") +String(seconds);
+  uint32_t seconds      = (remaining_ms %60000)/1000;
+  return String(minutes) + ":" + (seconds < 10 ? "0" : "") +String(seconds);
 }
 
 void check_telegram(){
@@ -112,15 +119,15 @@ void check_telegram(){
     if (telegram_data == "BACK") send_ReplyKeyboard();
 
     // ====== TIMER 1 OFF ======
-    if (telegram_data == "+1 MIN (T1 OFF)")  addTimer(timer1_off_active, timer1_off, timer1_off_end, 60UL*1000UL, activateRelay1, "Timer 1 OFF: +1 min added.");
-    if (telegram_data == "+10 MIN (T1 OFF)") addTimer(timer1_off_active, timer1_off, timer1_off_end, 10UL*60UL*1000UL, activateRelay1, "Timer 1 OFF: +10 min added.");
-    if (telegram_data == "+1 HOUR (T1 OFF)") addTimer(timer1_off_active, timer1_off, timer1_off_end, 60UL*60UL*1000UL, activateRelay1, "Timer 1 OFF: +1 hour added.");
+    if (telegram_data == "+1 MIN (T1 OFF)")  addTimer(timer1_off_active, timer1_off, timer1_off_end, 60UL*1000UL, activateRelay1);
+    if (telegram_data == "+10 MIN (T1 OFF)") addTimer(timer1_off_active, timer1_off, timer1_off_end, 10UL*60UL*1000UL, activateRelay1);
+    if (telegram_data == "+1 HOUR (T1 OFF)") addTimer(timer1_off_active, timer1_off, timer1_off_end, 60UL*60UL*1000UL, activateRelay1);
     if (telegram_data == "TURN OFF (T1 OFF)") stopTimer(timer1_off_active, timer1_off, "Timer 1 OFF stopped.");
 
     // ====== TIMER 2 OFF ======
-    if (telegram_data == "+1 MIN (T2 OFF)")  addTimer(timer2_off_active, timer2_off, timer2_off_end, 60UL*1000UL, activateRelay2, "Timer 2 OFF: +1 min added.");
-    if (telegram_data == "+10 MIN (T2 OFF)") addTimer(timer2_off_active, timer2_off, timer2_off_end, 10UL*60UL*1000UL, activateRelay2, "Timer 2 OFF: +10 min added.");
-    if (telegram_data == "+1 HOUR (T2 OFF)") addTimer(timer2_off_active, timer2_off, timer2_off_end, 60UL*60UL*1000UL, activateRelay2, "Timer 2 OFF: +1 hour added.");
+    if (telegram_data == "+1 MIN (T2 OFF)")  addTimer(timer2_off_active, timer2_off, timer2_off_end, 60UL*1000UL, activateRelay2);
+    if (telegram_data == "+10 MIN (T2 OFF)") addTimer(timer2_off_active, timer2_off, timer2_off_end, 10UL*60UL*1000UL, activateRelay2);
+    if (telegram_data == "+1 HOUR (T2 OFF)") addTimer(timer2_off_active, timer2_off, timer2_off_end, 60UL*60UL*1000UL, activateRelay2);
     if (telegram_data == "TURN OFF (T2 OFF)") stopTimer(timer2_off_active, timer2_off, "Timer 2 OFF stopped.");
   }
   
@@ -135,12 +142,14 @@ void check_telegram(){
 // Relays
 // --------------------------
 void activateRelay1() {
+  if (digitalRead(RELAY_1) == LOW) return;
   digitalWrite(RELAY_1, LOW);
   relay1 = false;
   bot.sendMessage(chat_id, "Relay 1 ON", "");
 }
 
 void activateRelay2() {
+  if (digitalRead(RELAY_2) == LOW) return;
   digitalWrite(RELAY_2, LOW);
   relay2 = false;
   bot.sendMessage(chat_id, "Relay 2 ON", "");
@@ -148,19 +157,19 @@ void activateRelay2() {
 
 void disableRelay1() {
   digitalWrite(RELAY_1, HIGH);
-  relay1 = false;
+  relay1 = true;
   bot.sendMessage(chat_id, "Relay 1 OFF", "");
 }
 
 void disableRelay2() {
   digitalWrite(RELAY_2, HIGH);
-  relay2 = false;
+  relay2 = true;
   bot.sendMessage(chat_id, "Relay 2 OFF", "");
 }
 
 void statusRelays() {
-  String msg = "Relay 1: " +String(digitalRead(RELAY_1) == LOW ? "ON" : "OFF") +" | Timer OFF remaining: " +formatTime(timer1_off);
-  msg     += "\nRelay 2: " +String(digitalRead(RELAY_2) == LOW ? "ON" : "OFF") +" | Timer OFF remaining: " +formatTime(timer2_off);
+  String msg = "Relay 1 " +String(digitalRead(RELAY_1) == LOW ? "ON" : "OFF") +" | Timer OFF remaining " +formatTime(timer1_off_end);
+  msg     += "\nRelay 2 " +String(digitalRead(RELAY_2) == LOW ? "ON" : "OFF") +" | Timer OFF remaining " +formatTime(timer2_off_end);
   bot.sendMessage(chat_id, msg, "");
 }
 
@@ -213,6 +222,12 @@ void loop() {
     if (count >= 5){
       // Telegram
       count = 0;
+
+      if (timer_update && millis() >= next_timer_update) {
+        timer_update = false;
+        statusRelays();
+      }
+      
       check_telegram();
     }
   }
